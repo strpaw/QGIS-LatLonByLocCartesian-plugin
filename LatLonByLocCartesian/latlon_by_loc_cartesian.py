@@ -43,28 +43,28 @@ WGS84_F = 1 / 298.257223563 # flatttening of the WGS84 ellipsoid
 
 # Special constants to use instead of False, to avoid ambigous where result of function might equal 0 and 
 # and result of fucntion will be used in if statements etc.
-VALID     = 'VALID'
+VALID = 'VALID'
 NOT_VALID = 'NOT_VALID'
 
 # Units of measure
-UOM_M    = 'M'     # meters
-UOM_KM   = 'KM'    # kilometers
-UOM_NM   = 'NM'    # nautical miles
+UOM_M = 'M'     # meters
+UOM_KM = 'KM'    # kilometers
+UOM_NM = 'NM'    # nautical miles
 UOM_FEET = 'FEET'  # feet
-UOM_SM   = 'SM'    # statue miles
+UOM_SM = 'SM'    # statue miles
 
 # Value types constant
-V_AZM     = 'AZM'
+V_AZM = 'AZM'
 V_MAG_VAR = 'MAG_VAR'
-V_LAT     = 'LAT'
-V_LON     = 'LON'
+V_LAT = 'LAT'
+V_LON = 'LON'
 
 # DMS, DM format separators, e.g. N32-44-55.21, N32 44 55.21, N32DEG 44 55.21
-S_SPACE      = ' '     # Blank, space separator
-S_HYPHEN     = '-'     # Hyphen separator
-S_WORD_DEG  = 'DEG' 
-S_WORD_MIN  = 'MIN' 
-S_WORD_SEC  = 'SEC' 
+S_SPACE = ' '     # Blank, space separator
+S_HYPHEN = '-'     # Hyphen separator
+S_WORD_DEG = 'DEG'
+S_WORD_MIN = 'MIN'
+S_WORD_SEC = 'SEC'
 S_ALL = [S_SPACE, S_HYPHEN, S_WORD_DEG, S_WORD_MIN, S_WORD_SEC]
 
 # Hemisphere letters
@@ -567,6 +567,8 @@ def dist_azm_orth_offset2latlon2(ref_lat, ref_lon, x_azm, y_azm, x_m, y_m):
     return lat2_dd, lon2_dd
 
 
+w = QWidget()
+
 
 class LatLonByLocCartesian:
     """QGIS Plugin Implementation."""
@@ -590,6 +592,9 @@ class LatLonByLocCartesian:
         self.xCoordinate_m = None
         self.yCoordinate_m = None
         self.outLyrSpName = ''
+        self.inputFile = ''
+        self.outputFile = ''
+        self.CSVCoordinateUnit = ''
         
         # Save reference to the QGIS interface
         self.iface = iface
@@ -608,7 +613,6 @@ class LatLonByLocCartesian:
 
             if qVersion() > '4.3.3':
                 QCoreApplication.installTranslator(self.translator)
-
 
         # Declare instance attributes
         self.actions = []
@@ -720,6 +724,9 @@ class LatLonByLocCartesian:
             parent=self.iface.mainWindow())
 
         self.dlg.pbAddPoint.clicked.connect(self.calcSpPoint)
+        self.dlg.pbInCsv.clicked.connect(self.selectInputFile)
+        self.dlg.pbOutCsv.clicked.connect(self.selectOutputFile)
+        self.dlg.pbCalcCSV.clicked.connect(self.calcCSVPoints)
 
     def unload(self):
         """Removes the plugin menu item and icon from QGIS GUI."""
@@ -819,8 +826,6 @@ class LatLonByLocCartesian:
             if self.origMagVar == NOT_VALID:
                 errMsg += 'Magnetic variation wrong format!\n'
                 checkResult = False
-
-
 
         if checkResult:
             self.xAxisAzimuth = float(self.xAxisBearing) + self.origMagVar
@@ -926,8 +931,191 @@ class LatLonByLocCartesian:
                 outLyr.updateExtents()
                 self.iface.mapCanvas().setExtent(outLyr.extent())
                 self.iface.mapCanvas().refresh()
-
         return
+
+    def selectInputFile(self):
+        """ Select input csv file with data: ID of the point, azimuth, distance from refernce point to the current point """
+        self.inputFile = QFileDialog.getOpenFileName(self.dlg, "Select input file ", "", '*.csv')
+        self.dlg.leInCSV.setText(self.inputFile)
+
+    def selectOutputFile(self):
+        """ Select output csv file """
+        self.outputFile = QFileDialog.getSaveFileName(self.dlg, "Select output file ", "", '*.csv')
+        self.dlg.leOutCSV.setText(self.outputFile)
+
+    def getCSVCoordinateUnit(self):
+        """ Gets X, Y coordinates unit for CSV file data """
+        if self.dlg.cbCSVCoorUnit.currentText() == 'm':
+            unit = UOM_M
+        elif self.dlg.cbCSVCoorUnit.currentText() == 'KM':
+            unit = UOM_KM
+        elif self.dlg.cbCSVCoorUnit.currentText() == 'NM':
+            unit = UOM_NM
+        elif self.dlg.cbCSVCoorUnit.currentText() == 'feet':
+            unit = UOM_FEET
+        elif self.dlg.cbCSVCoorUnit.currentText() == 'SM':
+            unit = UOM_SM
+        return unit
+
+    def checkCSVPoints(self):
+        checkResult = True
+        errMsg = ''
+
+        origLatDMS = self.dlg.leOrigLat.text()  # Latitude of the reference point
+        origLonDMS = self.dlg.leOrigLon.text()  # Longitude of the reference point
+        magVar = self.dlg.leOrigMagVar.text()  # Magnetic variation of the reference point
+        self.xAxisBearing = self.dlg.lexAxisBearing.text()
+        self.yAxisOrient = self.getYAxisOrientation()
+
+        self.inputFile = self.dlg.leInCSV.text()
+        self.outputFile = self.dlg.leOutCSV.text()
+
+
+        if origLonDMS == '':
+            errMsg += 'Enter origin latitude\n'
+        else:
+            self.origLatDD = parseDMS2DD(origLatDMS, V_LAT)
+            if self.origLatDD == NOT_VALID:
+                errMsg += 'Latitude not valid\n'
+                checkResult = False
+
+        if origLonDMS == '':
+            errMsg += 'Enter origin longitude\n'
+        else:
+            self.origLonDD = parseDMS2DD(origLonDMS, V_LON)
+            if self.origLatDD == NOT_VALID:
+                errMsg += 'Longitude not valid\n'
+                checkResult = False
+
+        if magVar == '':  # Magnetic Variation not entered - assume magnetic variation as 0.0
+            self.origMagVar = 0.0
+        else:
+            self.origMagVar = checkMagVar(magVar)
+            if self.origMagVar == NOT_VALID:
+                errMsg += 'Magnetic variation wrong format!\n'
+                checkResult = False
+
+        if self.inputFile == '':
+            errMsg += 'Choose input file\n'
+            checkResult = False
+        # TO DO: check input file header
+
+        if self.outputFile == '':
+            errMsg += 'Choose output file\n'
+            checkResult = False
+
+        self.CSVCoordinateUnit = self.getCSVCoordinateUnit()
+
+        if checkResult:
+            self.xAxisAzimuth = float(self.xAxisBearing) + self.origMagVar
+            if self.xAxisAzimuth < 0:
+                self.xAxisAzimuth += 360
+            elif self.xAxisAzimuth > 360:
+                self.xAxisAzimuth -= 360
+
+            self.yAxisOrient = self.getYAxisOrientation()
+            if self.yAxisOrient == 'RIGHT':
+                self.yAxisAzimuth = self.xAxisAzimuth + 90
+            elif self.yAxisOrient == 'LEFT':
+                self.yAxisAzimuth = self.xAxisAzimuth - 90
+
+            if self.yAxisAzimuth < 0:
+                self.yAxisAzimuth += 360
+            elif self.yAxisAzimuth > 360:
+                self.yAxisAzimuth -= 360
+        else:
+            QMessageBox.critical(w, "Message", errMsg)
+        return checkResult
+
+    def calcCSVPoints(self):
+        if self.checkCSVPoints():
+            errNotes = ''
+            outLyrCSVName = 'CSV' + getTmpName()
+            self.createTmpLayer(outLyrCSVName)
+            outLyrCSV = QgsVectorLayer('Point?crs=epsg:4326', outLyrCSVName, 'memory')
+            outLyrCSV = self.iface.activeLayer()
+            outLyrCSV.startEditing()
+            outProvCSV = outLyrCSV.dataProvider()
+
+            feat = QgsFeature()
+
+            outCSVFieldNames = ['P_NAME',
+                                'X',
+                                'Y',
+                                'LAT_DMS',
+                                'LON_DMS',
+                                'CART_COOR_STRING',
+                                'ERR_NOTES']
+
+            xAxisAzimuthReverse = self.xAxisAzimuth - 180
+            if xAxisAzimuthReverse < 0:
+                xAxisAzimuthReverse += 360
+            elif xAxisAzimuthReverse > 360:
+                xAxisAzimuthReverse -= 360
+
+            yAxisAzimuthReverse = self.yAxisAzimuth - 180
+            if yAxisAzimuthReverse < 0:
+                yAxisAzimuthReverse += 360
+            elif yAxisAzimuthReverse > 360:
+                yAxisAzimuthReverse -= 360
+
+            with open(self.inputFile, 'r') as inCSV:
+                with open(self.outputFile, 'w') as outCSV:
+                    reader = csv.DictReader(inCSV, delimiter=';')
+                    writer = csv.DictWriter(outCSV, fieldnames=outCSVFieldNames, delimiter=';')
+                    for row in reader:
+                        try:
+                            # TO DO: validation input line
+                            x_m = toMeters(float(row['X']), self.CSVCoordinateUnit)
+                            y_m = toMeters(float(row['Y']), self.CSVCoordinateUnit)
+
+                            if x_m >= 0:  # Normal x axis azimuth
+                                if y_m >= 0:  # Normal y axis azimuth
+                                    epLatDD, epLonDD = dist_azm_orth_offset2latlon2(self.origLatDD, self.origLonDD,
+                                                                                    self.xAxisAzimuth,
+                                                                                    self.yAxisAzimuth,
+                                                                                    x_m, y_m)
+                                elif y_m < 0:
+                                    epLatDD, epLonDD = dist_azm_orth_offset2latlon2(self.origLatDD, self.origLonDD,
+                                                                                    self.xAxisAzimuth,
+                                                                                    yAxisAzimuthReverse,
+                                                                                    x_m, math.fabs(y_m))
+                            elif x_m < 0:
+                                if y_m >= 0:  # Normal y axis azimuth
+                                    epLatDD, epLonDD = dist_azm_orth_offset2latlon2(self.origLatDD, self.origLonDD,
+                                                                                    xAxisAzimuthReverse,
+                                                                                    self.yAxisAzimuth,
+                                                                                    math.fabs(x_m), y_m)
+                                elif y_m < 0:
+                                    epLatDD, epLonDD = dist_azm_orth_offset2latlon2(self.origLatDD, self.origLonDD,
+                                                                                    xAxisAzimuthReverse,
+                                                                                    yAxisAzimuthReverse,
+                                                                                    math.fabs(self.x_m),
+                                                                                    math.fabs(self.y_m))
+                            epLatDMS = DD2HLetterDelimitedDMS(epLatDD, V_LAT, 3)
+                            epLonDMS = DD2HLetterDelimitedDMS(epLonDD, V_LON, 3)
+
+                            cartCoor = 'TEST'
+
+                            writer.writerow({'P_NAME': row['P_NAME'],
+                                             'X': row['X'],
+                                             'Y': row['Y'],
+                                             'LAT_DMS': epLatDMS,
+                                             'LON_DMS': epLonDMS,
+                                             'CART_COOR_STRING': 'TEST',
+                                             'ERR_NOTES': ''})
+                            endPoint = QgsPoint(epLonDD, epLatDD)
+                            feat.setGeometry(QgsGeometry.fromPoint(endPoint))
+                            feat.setAttributes([row['P_NAME'], epLatDMS, epLonDMS, cartCoor])
+                            outProvCSV.addFeatures([feat])
+                            outLyrCSV.commitChanges()
+                        except:
+                            pass
+            outLyrCSV.updateExtents()
+            self.iface.mapCanvas().setExtent(outLyrCSV.extent())
+            self.iface.mapCanvas().refresh()
+        return
+
     def run(self):
         """Run method that performs all the real work"""
         # show the dialog
