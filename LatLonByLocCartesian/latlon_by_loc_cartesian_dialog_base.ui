@@ -301,6 +301,41 @@
        <string>Calculate</string>
       </property>
      </widget>
+     <widget class="QComboBox" name="cbCSVCoorUnit">
+      <property name="geometry">
+       <rect>
+        <x>180</x>
+        <y>120</y>
+        <width>92</width>
+        <height>27</height>
+       </rect>
+      </property>
+      <item>
+       <property name="text">
+        <string>m</string>
+       </property>
+      </item>
+      <item>
+       <property name="text">
+        <string>KM</string>
+       </property>
+      </item>
+      <item>
+       <property name="text">
+        <string>NM</string>
+       </property>
+      </item>
+      <item>
+       <property name="text">
+        <string>feet</string>
+       </property>
+      </item>
+      <item>
+       <property name="text">
+        <string>SM</string>
+       </property>
+      </item>
+     </widget>
     </widget>
    </widget>
   </widget>
