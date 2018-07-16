@@ -884,18 +884,22 @@ class LatLonByLocCartesian:
         #self.yAxisOrient = self.getYAxisOrientation()
 
         if origLatDMS == '':
+            checkResult = False
             errMsg += 'Enter origin latitude\n'
-        else:
+
+        if origLatDMS != '':
             self.origLatDD = parseDMS2DD(origLatDMS, C_LAT)
             if self.origLatDD == NOT_VALID:
                 errMsg += 'Latitude not valid\n'
                 checkResult = False
 
         if origLonDMS == '':
+            checkResult = False
             errMsg += 'Enter origin longitude\n'
-        else:
+
+        if origLonDMS != '':
             self.origLonDD = parseDMS2DD(origLonDMS, C_LON)
-            if self.origLatDD == NOT_VALID:
+            if self.origLonDD == NOT_VALID:
                 errMsg += 'Longitude not valid\n'
                 checkResult = False
 
